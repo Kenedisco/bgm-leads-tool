@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BGM Lead Getter — SYCF</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0f0e0c;
+  --paper: #f5f0e8;
+  --cream: #ede8dc;
+  --gold: #c8963e;
+  --gold-dim: #a07830;
+  --hot: #c0392b;
+  --warm: #d4830a;
+  --cold: #2c7a5a;
+  --rule: #d4cfc4;
+  --muted: #7a7468;
+  --card: #faf7f2;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+/* ── HEADER ── */
+.masthead {
+  border-bottom: 2px solid var(--ink);
+  padding: 18px 32px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  background: var(--ink);
+}
+.masthead-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--paper);
+  letter-spacing: .02em;
+}
+.masthead-sub {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+/* ── LAYOUT ── */
+.layout { display: grid; grid-template-columns: 320px 1fr; min-height: calc(100vh - 57px); }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  border-right: 1px solid var(--rule);
+  padding: 28px 24px;
+  background: var(--cream);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+.label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+input[type=text], select, textarea {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 9px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s;
+}
+input[type=text]:focus, select:focus, textarea:focus { border-color: var(--gold); }
+select { cursor: pointer; }
+textarea { resize: vertical; min-height: 80px; font-size: 12px; line-height: 1.5; }
+
+.keyword-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.kw-tag {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .12s;
+  user-select: none;
+}
+.kw-tag.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+.run-btn {
+  width: 100%;
+  padding: 13px;
+  background: var(--gold);
+  color: var(--ink);
+  border: none;
+  border-radius: 4px;
+  font-family: 'Playfair Display', serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+  margin-top: 4px;
+}
+.run-btn:hover { background: var(--gold-dim); color: var(--paper); }
+.run-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.api-row { display: flex; gap: 6px; }
+.api-row input { flex: 1; font-family: 'DM Mono', monospace; font-size: 11px; }
+.show-btn {
+  padding: 0 10px;
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── MAIN PANEL ── */
+.main { padding: 28px 32px; display: flex; flex-direction: column; gap: 24px; }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  opacity: .4;
+  padding: 60px 0;
+}
+.empty-icon {
+  width: 48px; height: 48px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+}
+.empty-state p { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .06em; }
+
+/* ── STATUS BAR ── */
+.status-bar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--ink);
+  border-radius: 4px;
+  color: var(--paper);
+}
+.status-bar.visible { display: flex; }
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--gold);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.status-text { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gold); letter-spacing: .04em; }
+
+/* ── SUMMARY ROW ── */
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.stat-card {
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--card);
+}
+.stat-card .stat-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+.stat-card .stat-label { font-size: 10px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .08em; }
+.stat-card.hot .stat-num { color: var(--hot); }
+.stat-card.warm .stat-num { color: var(--warm); }
+.stat-card.cold .stat-num { color: var(--cold); }
+
+/* ── FILTER TABS ── */
+.filter-row {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  overflow: hidden;
+  width: fit-content;
+}
+.filter-tab {
+  padding: 7px 16px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: none;
+  background: var(--paper);
+  color: var(--muted);
+  border-right: 1px solid var(--rule);
+  transition: all .12s;
+}
+.filter-tab:last-child { border-right: none; }
+.filter-tab.active { background: var(--ink); color: var(--paper); }
+
+/* ── EXPORT ROW ── */
+.action-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.export-btns { display: flex; gap: 8px; }
+.export-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: var(--ink);
+  transition: all .12s;
+}
+.export-btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* ── LEAD CARDS ── */
+.leads-grid { display: flex; flex-direction: column; gap: 14px; }
+
+.lead-card {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--card);
+  overflow: hidden;
+  transition: box-shadow .15s;
+}
+.lead-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+
+.lead-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--rule);
+  gap: 12px;
+}
+.lead-name-block { flex: 1; }
+.lead-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.lead-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 3px;
+  letter-spacing: .04em;
+}
+.heat-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 3px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.heat-badge.hot { background: #fde8e6; color: var(--hot); border: 1px solid #f5c0bb; }
+.heat-badge.warm { background: #fdf0e0; color: var(--warm); border: 1px solid #f5d8a0; }
+.heat-badge.cold { background: #e4f2ec; color: var(--cold); border: 1px solid #b8dfc9; }
+
+.lead-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+.review-block { display: flex; flex-direction: column; gap: 6px; }
+.review-excerpt {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #3a3730;
+  padding: 8px 10px;
+  background: var(--cream);
+  border-left: 3px solid var(--gold);
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+}
+.review-source {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: .06em;
+}
+
+.pain-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.pain-tag {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: #fde8e6;
+  color: var(--hot);
+  border: 1px solid #f5c0bb;
+}
+
+.whatsapp-block {
+  border: 1px solid #c8e6c9;
+  border-radius: 5px;
+  background: #f1f8f2;
+  padding: 10px 12px;
+}
+.whatsapp-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--cold);
+  margin-bottom: 5px;
+}
+.whatsapp-msg {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #1a3a2a;
+}
+.copy-btn {
+  margin-top: 7px;
+  padding: 5px 12px;
+  background: #2c7a5a;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .12s;
+}
+.copy-btn:hover { background: #1e5a40; }
+.copy-btn.copied { background: #888; }
+
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.score-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.score-bar { height: 100%; border-radius: 2px; transition: width .4s ease; }
+.score-bar.hot { background: var(--hot); }
+.score-bar.warm { background: var(--warm); }
+.score-bar.cold { background: var(--cold); }
+.score-num { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); min-width: 28px; text-align: right; }
+
+/* ── ERROR ── */
+.error-msg {
+  display: none;
+  padding: 10px 14px;
+  background: #fde8e6;
+  border: 1px solid #f5c0bb;
+  border-radius: 4px;
+  color: var(--hot);
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+}
+.error-msg.visible { display: block; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <span class="masthead-logo">Sound You Can Feel</span>
+  <span class="masthead-sub">BGM Lead Getter &nbsp;·&nbsp; Private Tool</span>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="label">Anthropic API Key</div>
+      <div class="api-row">
+        <input type="password" id="apiKey" placeholder="sk-ant-..." />
+        <button class="show-btn" onclick="toggleKey()">show</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="label">City</div>
+      <input type="text" id="city" placeholder="e.g. Dubai" />
+    </div>
+
+    <div class="sidebar-section">
+      <div class="label">Area / Neighbourhood</div>
+      <input type="text" id="area" placeholder="e.g. DIFC, Downtown, JBR" />
+    </div>
+
+    <div class="sidebar-section">
+      <div class="label">Venue Type</div>
+      <select id="venueType">
+        <option value="all">All venues</option>
+        <option value="hotel">Hotels & resorts</option>
+        <option value="restaurant">Restaurants & cafes</option>
+        <option value="bar">Bars & lounges</option>
+        <option value="retail">Retail & fashion</option>
+        <option value="spa">Spas & wellness</option>
+      </select>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="label">Keywords to scan for</div>
+      <div class="keyword-grid" id="kwGrid"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="label">Additional context (optional)</div>
+      <textarea id="extraContext" placeholder="e.g. focus on luxury 5-star only, avoid mall venues..."></textarea>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="runScan()">Scan for leads →</button>
+
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main" id="mainPanel">
+
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">⬡</div>
+      <p>Enter location and run scan</p>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+      <div class="spinner"></div>
+      <span class="status-text" id="statusText">Scanning reviews...</span>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div id="resultsSection" style="display:none; display:flex; flex-direction:column; gap:20px;">
+
+      <div class="summary-row" id="summaryRow"></div>
+
+      <div class="action-row">
+        <div class="filter-row" id="filterRow">
+          <button class="filter-tab active" onclick="filterLeads('all', this)">All</button>
+          <button class="filter-tab" onclick="filterLeads('hot', this)">🔴 Hot</button>
+          <button class="filter-tab" onclick="filterLeads('warm', this)">🟡 Warm</button>
+          <button class="filter-tab" onclick="filterLeads('cold', this)">🟢 Cold</button>
+        </div>
+        <div class="export-btns">
+          <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+          <button class="export-btn" onclick="exportPDF()">Save as PDF</button>
+        </div>
+      </div>
+
+      <div class="leads-grid" id="leadsGrid"></div>
+
+    </div>
+
+  </main>
+</div>
+
+<script>
+const KEYWORDS = [
+  'too loud','too quiet','wrong music','bad music','playlist',
+  'atmosphere','ambiance','vibe','noise','background music',
+  'music was','sound','distracting','couldn\'t hear','uncomfortable',
+  'Spotify','radio','generic','no music','silence'
+];
+
+let allLeads = [];
+let currentFilter = 'all';
+
+// Render keyword tags
+const kwGrid = document.getElementById('kwGrid');
+const activeKws = new Set(KEYWORDS.slice(0,10));
+KEYWORDS.forEach(kw => {
+  const tag = document.createElement('div');
+  tag.className = 'kw-tag' + (activeKws.has(kw) ? ' active' : '');
+  tag.textContent = kw;
+  tag.onclick = () => {
+    tag.classList.toggle('active');
+    if(tag.classList.contains('active')) activeKws.add(kw);
+    else activeKws.delete(kw);
+  };
+  kwGrid.appendChild(tag);
+});
+
+function toggleKey() {
+  const inp = document.getElementById('apiKey');
+  const btn = event.target;
+  if(inp.type === 'password') { inp.type = 'text'; btn.textContent = 'hide'; }
+  else { inp.type = 'password'; btn.textContent = 'show'; }
+}
+
+function setStatus(msg) {
+  document.getElementById('statusText').textContent = msg;
+  document.getElementById('statusBar').classList.add('visible');
+}
+function hideStatus() { document.getElementById('statusBar').classList.remove('visible'); }
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+function hideError() { document.getElementById('errorMsg').classList.remove('visible'); }
+
+async function runScan() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const city = document.getElementById('city').value.trim();
+  const area = document.getElementById('area').value.trim();
+  const venueType = document.getElementById('venueType').value;
+  const extra = document.getElementById('extraContext').value.trim();
+  const keywords = Array.from(activeKws);
+
+  if(!apiKey) return showError('Please enter your Anthropic API key.');
+  if(!city) return showError('Please enter a city to search.');
+  hideError();
+
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultsSection').style.display = 'none';
+  setStatus('Analysing venues and reviews in ' + city + (area ? ', ' + area : '') + '...');
+
+  const location = area ? `${area}, ${city}` : city;
+  const venueDesc = venueType === 'all' ? 'hotels, restaurants, bars, cafes, retail stores, spas' : venueType;
+
+  const prompt = `You are a B2B lead intelligence tool for Sound You Can Feel (SYCF), a premium sonic branding and background music consultancy based in Dubai, run by Kennedy Stephenson with 25 years of experience working with Marriott, Dior, Bvlgari and Jumeirah.
+
+Your task: Generate 8 realistic, highly plausible BGM (background music) leads for ${venueDesc} venues in ${location}.
+
+These leads are based on the kind of reviews that actually appear on Google Maps, TripAdvisor, Booking.com and Zomato for real venues in this area. Use your knowledge of real venues, real review patterns, and real complaints that hospitality businesses receive about their music and atmosphere.
+
+Keywords to look for in simulated reviews: ${keywords.join(', ')}
+${extra ? 'Additional context: ' + extra : ''}
+
+For each lead, create a realistic venue with plausible details for this specific location. Score each lead:
+- HOT: Multiple negative music/atmosphere mentions, clear pain, premium venue
+- WARM: 1-2 music mentions, mid-tier venue, potential interest
+- COLD: Subtle atmosphere mentions, smaller venue, lower priority
+
+Return ONLY valid JSON, no markdown, no explanation:
+{
+  "leads": [
+    {
+      "name": "venue name",
+      "type": "hotel|restaurant|bar|retail|spa",
+      "area": "specific area/neighbourhood",
+      "rating": 4.2,
+      "reviewCount": 847,
+      "heat": "hot|warm|cold",
+      "score": 85,
+      "painPoints": ["too loud at dinner", "wrong genre for brand"],
+      "reviews": [
+        {
+          "source": "TripAdvisor|Google Maps|Booking.com|Zomato",
+          "excerpt": "realistic review excerpt mentioning music or atmosphere",
+          "sentiment": "negative|mixed"
+        }
+      ],
+      "whatsappOpener": "personalised WhatsApp opening message Kennedy would send referencing their specific issue, max 3 sentences, no emojis, professional tone"
+    }
+  ]
+}`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if(!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || 'API error ' + response.status);
+    }
+
+    const data = await response.json();
+    const raw = data.content[0].text.trim();
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    allLeads = parsed.leads || [];
+
+    hideStatus();
+    renderResults();
+
+  } catch(e) {
+    hideStatus();
+    showError('Error: ' + e.message);
+    document.getElementById('emptyState').style.display = 'flex';
+  }
+
+  document.getElementById('runBtn').disabled = false;
+}
+
+function renderResults() {
+  const hot = allLeads.filter(l => l.heat === 'hot').length;
+  const warm = allLeads.filter(l => l.heat === 'warm').length;
+  const cold = allLeads.filter(l => l.heat === 'cold').length;
+
+  document.getElementById('summaryRow').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${allLeads.length}</div><div class="stat-label">Total leads</div></div>
+    <div class="stat-card hot"><div class="stat-num">${hot}</div><div class="stat-label">Hot leads</div></div>
+    <div class="stat-card warm"><div class="stat-num">${warm}</div><div class="stat-label">Warm leads</div></div>
+    <div class="stat-card cold"><div class="stat-num">${cold}</div><div class="stat-label">Cold leads</div></div>
+  `;
+
+  renderLeads(currentFilter);
+  document.getElementById('resultsSection').style.display = 'flex';
+}
+
+function renderLeads(filter) {
+  const filtered = filter === 'all' ? allLeads : allLeads.filter(l => l.heat === filter);
+  const grid = document.getElementById('leadsGrid');
+
+  grid.innerHTML = filtered.map((lead, i) => `
+    <div class="lead-card" data-heat="${lead.heat}">
+      <div class="lead-header">
+        <div class="lead-name-block">
+          <div class="lead-name">${lead.name}</div>
+          <div class="lead-meta">${lead.type.toUpperCase()} &nbsp;·&nbsp; ${lead.area} &nbsp;·&nbsp; ★ ${lead.rating} &nbsp;·&nbsp; ${lead.reviewCount} reviews</div>
+        </div>
+        <span class="heat-badge ${lead.heat}">${lead.heat === 'hot' ? '🔴 Hot' : lead.heat === 'warm' ? '🟡 Warm' : '🟢 Cold'}</span>
+      </div>
+      <div class="lead-body">
+
+        <div class="score-row">
+          <div class="label" style="min-width:52px">Score</div>
+          <div class="score-bar-wrap"><div class="score-bar ${lead.heat}" style="width:${lead.score}%"></div></div>
+          <div class="score-num">${lead.score}/100</div>
+        </div>
+
+        <div class="pain-tags">
+          ${(lead.painPoints||[]).map(p => `<span class="pain-tag">${p}</span>`).join('')}
+        </div>
+
+        <div class="review-block">
+          ${(lead.reviews||[]).map(r => `
+            <div>
+              <div class="review-excerpt">"${r.excerpt}"</div>
+              <div class="review-source">via ${r.source}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="whatsapp-block">
+          <div class="whatsapp-label">WhatsApp opener</div>
+          <div class="whatsapp-msg" id="wa-${i}">${lead.whatsappOpener}</div>
+          <button class="copy-btn" id="copy-${i}" onclick="copyWA(${i})">Copy message</button>
+        </div>
+
+      </div>
+    </div>
+  `).join('');
+}
+
+function filterLeads(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderLeads(filter);
+}
+
+function copyWA(i) {
+  const text = document.getElementById('wa-'+i).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-'+i);
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy message'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function exportCSV() {
+  if(!allLeads.length) return;
+  const rows = [['Name','Type','Area','Rating','Reviews','Heat','Score','Pain Points','WhatsApp Opener']];
+  allLeads.forEach(l => {
+    rows.push([
+      l.name, l.type, l.area, l.rating, l.reviewCount,
+      l.heat, l.score,
+      (l.painPoints||[]).join(' | '),
+      '"' + (l.whatsappOpener||'').replace(/"/g,'""') + '"'
+    ]);
+  });
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bgm-leads.csv';
+  a.click();
+}
+
+function exportPDF() { window.print(); }
+</script>
+</body>
+</html>
