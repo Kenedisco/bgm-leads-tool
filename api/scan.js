@@ -21,7 +21,7 @@ module.exports = async function handler(req, res) {
 
   const prompt = `You are a B2B lead intelligence tool for Sound You Can Feel (SYCF), a premium sonic branding and background music consultancy based in Dubai, run by Kennedy Stephenson with 25 years of experience working with Marriott, Dior, Bvlgari and Jumeirah.
 
-Your task: Generate 8 realistic, highly plausible BGM (background music) leads for ${venueDesc} venues in ${location}.
+Your task: Generate 6 realistic, highly plausible BGM (background music) leads for ${venueDesc} venues in ${location}.
 
 These leads are based on the kind of reviews that actually appear on Google Maps, TripAdvisor, Booking.com, Zomato, Yelp, Talabat, OpenTable and Foursquare for real venues in this area. Use your knowledge of real venues, real review patterns, and real complaints that hospitality businesses receive about their music and atmosphere.
 
@@ -33,7 +33,7 @@ For each lead, create a realistic venue with plausible details for this specific
 - WARM: 1-2 music mentions, mid-tier venue, potential interest (score 45-74)
 - COLD: Subtle atmosphere mentions, smaller venue, lower priority (score 20-44)
 
-Distribute across: 3 hot, 3 warm, 2 cold leads.
+Distribute across: 2 hot, 2 warm, 2 cold leads.
 
 Sources to simulate reviews from: Google Maps, TripAdvisor, Booking.com, Zomato, Yelp, Talabat, OpenTable, Foursquare.
 
