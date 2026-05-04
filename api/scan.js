@@ -13,15 +13,16 @@ module.exports = async function handler(req, res) {
   const location = area ? `${area}, ${city}` : city;
 
   const venueQueries = {
-    all:        ['hotels', 'restaurants', 'cafes', 'retail stores', 'bars', 'spas'],
-    hotel:      ['hotels', 'resorts', 'boutique hotels'],
-    restaurant: ['restaurants', 'cafes', 'dining'],
-    bar:        ['bars', 'lounges', 'nightlife'],
-    retail:     ['retail stores', 'boutiques', 'fashion stores'],
-    spa:        ['spas', 'wellness centers'],
+    all:        ['hotels', 'restaurants cafes'],
+    hotel:      ['hotels resorts'],
+    restaurant: ['restaurants cafes'],
+    bar:        ['bars lounges'],
+    retail:     ['retail boutiques'],
+    spa:        ['spas wellness'],
   };
 
-  const queries = (venueQueries[venueType] || venueQueries.all).slice(0, 3);
+  // Only 1-2 queries to stay within timeout
+  const queries = (venueQueries[venueType] || venueQueries.all).slice(0, 2);
 
   async function searchPlaces(query) {
     const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query + ' in ' + location)}&key=${PLACES_KEY}`;
@@ -43,40 +44,33 @@ module.exports = async function handler(req, res) {
   }
 
   async function scoreLeads(venues) {
-    const venueData = venues.map(v => ({
+    // Keep payload small — 4 venues max, 2 reviews each, 200 chars per review
+    const venueData = venues.slice(0, 4).map(v => ({
       name: v.name,
       type: (v.types || [])[0] || 'venue',
-      address: v.formatted_address,
+      area: (v.formatted_address || '').split(',').slice(0, 2).join(','),
       rating: v.rating,
       reviewCount: v.user_ratings_total,
       website: v.website || null,
       phone: v.formatted_phone_number || null,
-      reviews: (v.reviews || []).slice(0, 3).map(r => ({
-        text: r.text ? r.text.substring(0, 300) : '',
-        rating: r.rating,
-        source: 'Google Maps'
+      reviews: (v.reviews || []).slice(0, 2).map(r => ({
+        text: (r.text || '').substring(0, 200),
+        rating: r.rating
       }))
     }));
 
-    const prompt = `You are a BGM lead scoring tool for Sound You Can Feel (SYCF), a bespoke background music consultancy in Dubai run by Kennedy Stephenson.
+    const prompt = `BGM lead scoring for Sound You Can Feel, Dubai. Score these venues based on their Google reviews — look for music/atmosphere complaints (too loud, too quiet, wrong vibe, generic, dead atmosphere, uncomfortable).
 
-Analyse these REAL venues and their REAL Google reviews. Look for signals they need better background music: complaints about atmosphere, music too loud/quiet/wrong/generic, dead vibe, uncomfortable environment, any mention of music or ambiance.
+HOT 75-100: clear music complaints, premium venue
+WARM 45-74: subtle atmosphere issues
+COLD 20-44: no complaints but fits profile
 
-Keywords: ${(keywords || []).join(', ')}
-${extraContext ? 'Context: ' + extraContext : ''}
+WhatsApp opener: 1-2 sentences, confident, specific, no emojis.
 
-Score each venue:
-- HOT (75-100): Clear music/atmosphere complaints, premium venue
-- WARM (45-74): Subtle atmosphere issues, potential interest
-- COLD (20-44): No music complaints but fits target profile
+VENUES: ${JSON.stringify(venueData)}
 
-WhatsApp opener: confident, direct, specific to this venue. Max 2 sentences. No emojis. No "I hope this finds you well."
-
-VENUES:
-${JSON.stringify(venueData, null, 2)}
-
-Return ONLY valid JSON, no markdown, no extra text:
-{"leads":[{"name":"string","type":"hotel|restaurant|bar|retail|spa|cafe","area":"string","rating":0.0,"reviewCount":0,"heat":"hot|warm|cold","score":0,"website":"string|null","phone":"string|null","painPoints":["string"],"reviews":[{"source":"Google Maps","excerpt":"string","sentiment":"negative|mixed"}],"whatsappOpener":"string"}]}`;
+Respond with ONLY this JSON structure, nothing else:
+{"leads":[{"name":"","type":"","area":"","rating":0,"reviewCount":0,"heat":"","score":0,"website":null,"phone":null,"painPoints":[],"reviews":[{"source":"Google Maps","excerpt":"","sentiment":""}],"whatsappOpener":""}]}`;
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -86,29 +80,43 @@ Return ONLY valid JSON, no markdown, no extra text:
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4000,
         messages: [{ role: 'user', content: prompt }]
       })
     });
 
     const raw = await r.text();
-    if (!r.ok) throw new Error('Anthropic error: ' + r.status + ' — ' + raw.substring(0, 200));
+    if (!r.ok) throw new Error('Anthropic error: ' + r.status + ' — ' + raw.substring(0, 300));
 
     const parsed = JSON.parse(raw);
     const text = (parsed.content?.[0]?.text || '').trim();
-    const clean = text.replace(/```json[\s\S]*?```|```/g, '').trim();
 
-    const jsonMatch = clean.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON found in model response.');
+    // Strip markdown if present
+    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
 
-    return JSON.parse(jsonMatch[0]);
+    // Try direct parse first
+    try {
+      return JSON.parse(clean);
+    } catch (_) {
+      // Fallback: extract JSON object
+      const match = clean.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Claude returned non-JSON: ' + clean.substring(0, 300));
+      return JSON.parse(match[0]);
+    }
   }
 
   try {
-    const searchResults = await Promise.all(queries.map(q => searchPlaces(q).catch(() => [])));
-    const allPlaces = searchResults.flat();
+    // Run place searches sequentially to avoid timeout
+    const allPlaces = [];
+    for (const q of queries) {
+      try {
+        const results = await searchPlaces(q);
+        allPlaces.push(...results);
+      } catch (_) {}
+    }
 
+    // Deduplicate
     const seen = new Set();
     const uniquePlaces = allPlaces.filter(p => {
       if (seen.has(p.place_id)) return false;
@@ -118,11 +126,16 @@ Return ONLY valid JSON, no markdown, no extra text:
 
     if (!uniquePlaces.length) return res.status(200).json({ leads: [] });
 
-    const top = uniquePlaces.slice(0, 6);
-    const detailed = await Promise.all(top.map(p => getPlaceDetails(p.place_id).catch(() => null)));
-    const withDetails = detailed.filter(Boolean);
+    // Get details for top 4 only — sequentially
+    const withDetails = [];
+    for (const p of uniquePlaces.slice(0, 4)) {
+      try {
+        const detail = await getPlaceDetails(p.place_id);
+        if (detail) withDetails.push(detail);
+      } catch (_) {}
+    }
 
-    if (!withDetails.length) return res.status(500).json({ error: 'Could not retrieve venue details from Google Places.' });
+    if (!withDetails.length) return res.status(500).json({ error: 'Could not retrieve venue details.' });
 
     const result = await scoreLeads(withDetails);
 
