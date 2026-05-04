@@ -1,77 +1,111 @@
 module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'API key not configured on server.' });
-  }
+  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  const PLACES_KEY    = process.env.GOOGLE_PLACES_KEY;
+
+  if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'Anthropic API key not configured.' });
+  if (!PLACES_KEY)    return res.status(500).json({ error: 'Google Places API key not configured.' });
 
   const { city, area, venueType, keywords, extraContext } = req.body;
-
-  if (!city) {
-    return res.status(400).json({ error: 'City is required.' });
-  }
+  if (!city) return res.status(400).json({ error: 'City is required.' });
 
   const location = area ? `${area}, ${city}` : city;
-  const venueDesc = venueType === 'all'
-    ? 'hotels, restaurants, bars, cafes, retail stores, spas'
-    : venueType;
 
-  const prompt = `You are a B2B lead intelligence tool for Sound You Can Feel (SYCF), a premium sonic branding and background music consultancy based in Dubai, run by Kennedy Stephenson with 25 years of experience working with Marriott, Dior, Bvlgari and Jumeirah.
+  const venueQueries = {
+    all:        ['hotels', 'restaurants', 'cafes', 'retail stores', 'bars', 'spas'],
+    hotel:      ['hotels', 'resorts', 'boutique hotels'],
+    restaurant: ['restaurants', 'cafes', 'dining'],
+    bar:        ['bars', 'lounges', 'nightlife'],
+    retail:     ['retail stores', 'boutiques', 'fashion stores'],
+    spa:        ['spas', 'wellness centers'],
+  };
 
-Your task: Generate 6 realistic, highly plausible BGM (background music) leads for ${venueDesc} venues in ${location}.
+  const queries = (venueQueries[venueType] || venueQueries.all).slice(0, 3);
 
-These leads are based on the kind of reviews that actually appear on Google Maps, TripAdvisor, Booking.com, Zomato, Yelp, Talabat, OpenTable and Foursquare for real venues in this area. Use your knowledge of real venues, real review patterns, and real complaints that hospitality businesses receive about their music and atmosphere.
+  async function searchPlaces(query) {
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query + ' in ' + location)}&key=${PLACES_KEY}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    if (d.status !== 'OK' && d.status !== 'ZERO_RESULTS') {
+      throw new Error('Google Places error: ' + d.status + ' — ' + (d.error_message || ''));
+    }
+    return (d.results || []).slice(0, 4);
+  }
 
-Keywords to look for: ${(keywords || []).join(', ')}
-${extraContext ? 'Additional context: ' + extraContext : ''}
+  async function getPlaceDetails(placeId) {
+    const fields = 'name,rating,user_ratings_total,reviews,formatted_address,website,formatted_phone_number,types';
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${PLACES_KEY}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    if (d.status !== 'OK') return null;
+    return d.result;
+  }
 
-For each lead, create a realistic venue with plausible details for this specific location. Score each lead:
-- HOT: Multiple negative music/atmosphere mentions, clear pain, premium venue (score 75-100)
-- WARM: 1-2 music mentions, mid-tier venue, potential interest (score 45-74)
-- COLD: Subtle atmosphere mentions, smaller venue, lower priority (score 20-44)
+  async function scoreLeads(venues) {
+    const venueData = venues.map(v => ({
+      name: v.name,
+      type: v.types?.[0] || 'venue',
+      address: v.formatted_address,
+      rating: v.rating,
+      reviewCount: v.user_ratings_total,
+      website: v.website,
+      phone: v.formatted_phone_number,
+      reviews: (v.reviews || []).map(r => ({
+        text: r.text,
+        rating: r.rating,
+        source: 'Google Maps'
+      }))
+    }));
 
-Distribute across: 2 hot, 2 warm, 2 cold leads.
+    const prompt = `You are a BGM lead scoring tool for Sound You Can Feel (SYCF), a bespoke background music consultancy based in Dubai run by Kennedy Stephenson.
 
-Sources to simulate reviews from: Google Maps, TripAdvisor, Booking.com, Zomato, Yelp, Talabat, OpenTable, Foursquare.
+Below are REAL venues with REAL Google reviews. Analyse each venue's reviews for signals that they need better background music — complaints about atmosphere, music being too loud/quiet/wrong/generic, dead vibe, uncomfortable environment, or any mention of music/ambiance.
 
-Return ONLY valid JSON, no markdown, no explanation, no preamble:
+Keywords to watch for: ${(keywords || []).join(', ')}
+${extraContext ? 'Context: ' + extraContext : ''}
+
+Score each venue:
+- HOT (75-100): Clear music/atmosphere complaints in reviews, premium venue
+- WARM (45-74): Subtle atmosphere issues, mid-tier venue, potential interest
+- COLD (20-44): No music complaints but fits the target profile
+
+For the WhatsApp opener: write what Kennedy would actually send — confident, direct, references something specific about the venue or their reviews. Max 2-3 sentences. No emojis. No "I hope this message finds you well."
+
+VENUES DATA:
+${JSON.stringify(venueData, null, 2)}
+
+Return ONLY valid JSON, no markdown:
 {
   "leads": [
     {
-      "name": "venue name",
-      "type": "hotel|restaurant|bar|retail|spa",
-      "area": "specific area/neighbourhood",
+      "name": "exact venue name",
+      "type": "hotel|restaurant|bar|retail|spa|cafe",
+      "area": "neighbourhood from address",
       "rating": 4.2,
       "reviewCount": 847,
       "heat": "hot|warm|cold",
       "score": 85,
-      "painPoints": ["too loud at dinner service", "wrong genre for brand positioning"],
+      "website": "url or null",
+      "phone": "phone or null",
+      "painPoints": ["specific pain point from actual reviews"],
       "reviews": [
         {
-          "source": "TripAdvisor",
-          "excerpt": "realistic review excerpt mentioning music or atmosphere issue, 1-2 sentences",
-          "sentiment": "negative|mixed"
-        },
-        {
           "source": "Google Maps",
-          "excerpt": "second realistic review excerpt",
+          "excerpt": "relevant excerpt from the actual review text, max 2 sentences",
           "sentiment": "negative|mixed"
         }
       ],
-      "whatsappOpener": "personalised WhatsApp opening message Kennedy Stephenson would send to this specific venue referencing their exact issue. Professional, confident, no emojis, max 3 sentences. Reference a specific detail about their space or reviews."
+      "whatsappOpener": "Kennedy's personalised opening message"
     }
   ]
 }`;
 
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': ANTHROPIC_KEY,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
@@ -81,30 +115,43 @@ Return ONLY valid JSON, no markdown, no explanation, no preamble:
       })
     });
 
-    const rawText = await response.text();
+    const raw = await r.text();
+    if (!r.ok) throw new Error('Anthropic error: ' + r.status);
 
-    if (!response.ok) {
-      let errMsg = 'Anthropic API error ' + response.status;
-      try { errMsg = JSON.parse(rawText)?.error?.message || errMsg; } catch (_) {}
-      return res.status(response.status).json({ error: errMsg });
-    }
+    const parsed = JSON.parse(raw);
+    const text = parsed.content?.[0]?.text?.trim() || '';
+    const clean = text.replace(/```json[\s\S]*?```|```/g, '').trim();
+    return JSON.parse(clean);
+  }
 
-    let data;
-    try { data = JSON.parse(rawText); } catch (_) {
-      return res.status(500).json({ error: 'Unexpected response from Anthropic API.' });
-    }
+  try {
+    const searchResults = await Promise.all(queries.map(q => searchPlaces(q).catch(() => [])));
+    const allPlaces = searchResults.flat();
 
-    const raw = data.content?.[0]?.text?.trim() || '';
-    const clean = raw.replace(/```json[\s\S]*?```|```/g, '').trim();
+    const seen = new Set();
+    const uniquePlaces = allPlaces.filter(p => {
+      if (seen.has(p.place_id)) return false;
+      seen.add(p.place_id);
+      return true;
+    });
 
-    let parsed;
-    try { parsed = JSON.parse(clean); } catch (_) {
-      return res.status(500).json({ error: 'Model returned invalid JSON. Try again.' });
-    }
+    if (!uniquePlaces.length) return res.status(200).json({ leads: [] });
 
-    return res.status(200).json(parsed);
+    const top = uniquePlaces.slice(0, 8);
+    const detailed = await Promise.all(top.map(p => getPlaceDetails(p.place_id).catch(() => null)));
+    const withDetails = detailed.filter(Boolean);
+
+    if (!withDetails.length) return res.status(500).json({ error: 'Could not retrieve venue details from Google Places.' });
+
+    const result = await scoreLeads(withDetails);
+
+    const order = { hot: 0, warm: 1, cold: 2 };
+    result.leads.sort((a, b) => (order[a.heat] ?? 3) - (order[b.heat] ?? 3));
+
+    return res.status(200).json(result);
 
   } catch (e) {
+    console.error(e);
     return res.status(500).json({ error: e.message });
   }
-}
+};
